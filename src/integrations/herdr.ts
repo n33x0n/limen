@@ -6,6 +6,15 @@ import { setTimeout as delay } from "node:timers/promises";
 import { closedFeatures, closedJobFeatures } from "../job/job.ts";
 import { seatDir } from "../project/seat.ts";
 import { ENGINES, type EngineId, engineProfile } from "../runtime/engine.ts";
+import {
+	closeCoreView,
+	coreAvailable,
+	coreBinary,
+	openCoreView,
+	readCoreView,
+	reopenCoreView,
+	settleCoreView,
+} from "./herdr-core.ts";
 
 export type HerdrPlace = {
 	readonly workspace: string;
@@ -65,6 +74,10 @@ export async function openWatchTab(input: {
 	readonly role: string;
 }): Promise<HerdrPlace | undefined> {
 	if (process.env.HERDR_ENV !== "1") {
+		// Inside a herdr-core terminal the view opens there instead; it records its own place.
+		if (coreAvailable()) {
+			await openCoreView({ ...input, state: "running", follow: true });
+		}
 		return;
 	}
 	return createTab({ ...input, label: `${input.label} · running`, mode: "watch", follow: true, focus: false });
@@ -474,6 +487,7 @@ export function restoreHostedPane(pane: string, role: string): void {
 
 /** Terminal jobs leave no open tabs. A detached closer does the close so finalize never waits on Herdr; the closer records the result in the job log. */
 export async function settleJobTab(jobDir: string): Promise<void> {
+	await settleCoreView(jobDir);
 	const place = await readPlace(jobDir);
 	if (!place) {
 		return;
@@ -633,11 +647,14 @@ export async function openJobPlace(input: {
 	readonly cwd: string;
 	readonly running: boolean;
 }): Promise<string> {
+	const label = (await text(`${input.jobDir}/label`)) || basename(input.jobDir);
+	if (process.env.HERDR_ENV !== "1" && (coreAvailable() || (await readCoreView(input.jobDir)))) {
+		return reopenCoreView({ ...input, label });
+	}
 	const herdr = herdrBinary();
 	if (!herdr) {
 		throw new Error("herdr is not available");
 	}
-	const label = (await text(`${input.jobDir}/label`)) || basename(input.jobDir);
 	const recorded = await readPlace(input.jobDir);
 	const hosted = Boolean(await text(`${input.jobDir}/hosted`));
 	try {
@@ -677,7 +694,7 @@ export async function closeFeatureTabs(input: { readonly root: string; readonly 
 		throw new Error(`${feature} is not in done/ or dropped/; leftover tabs stay`);
 	}
 	const herdr = herdrBinary();
-	if (!herdr) {
+	if (!(herdr || coreBinary())) {
 		throw new Error("herdr is not available");
 	}
 	const coordinator = process.env.HERDR_TAB_ID?.trim();
@@ -691,20 +708,27 @@ export async function closeFeatureTabs(input: { readonly root: string; readonly 
 		if (!closedJobFeatures(await text(`${jobDir}/label`), entry.name, closedSet).includes(feature)) {
 			continue;
 		}
-		const places = await Promise.all([readPlace(jobDir), readPlace(jobDir, "diff")]);
-		for (const place of places) {
-			if (!place || place.tab === coordinator) {
-				continue;
-			}
-			try {
-				call(herdr, ["tab", "close", place.tab]);
-				closed += 1;
-			} catch (error) {
-				await skip(jobDir, error instanceof Error ? error.message : String(error));
-			}
-		}
+		closed += (await closeCoreView(jobDir)) ? 1 : 0;
+		closed += herdr ? await closeJobTabs(herdr, jobDir, coordinator) : 0;
 	}
 	return `closed ${closed} leftover tab${closed === 1 ? "" : "s"} for ${feature}`;
+}
+
+/** Close a job's watch and diff tabs, never the coordinator's own; returns the count. */
+async function closeJobTabs(herdr: string, jobDir: string, coordinator: string | undefined): Promise<number> {
+	let closed = 0;
+	for (const place of await Promise.all([readPlace(jobDir), readPlace(jobDir, "diff")])) {
+		if (!place || place.tab === coordinator) {
+			continue;
+		}
+		try {
+			call(herdr, ["tab", "close", place.tab]);
+			closed += 1;
+		} catch (error) {
+			await skip(jobDir, error instanceof Error ? error.message : String(error));
+		}
+	}
+	return closed;
 }
 
 async function createTab(input: {

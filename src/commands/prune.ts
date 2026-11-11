@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath, rename, rm } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
+import { closeCoreView } from "../integrations/herdr-core.ts";
 import { retainedGroupJob } from "../job/group-cabinet.ts";
 import { isTerminal } from "../job/job.ts";
 import { worktreeLock } from "../job/publication.ts";
@@ -107,6 +108,8 @@ async function retireFinishedJobs(
 	const landed = new Map(retired.filter((job) => job.branch).map((job) => [`${job.repository}\0${job.branch}`, job]));
 	const deleted = (await deleteLandedBranches(root, [...landed.values()])).filter((result) => !result.kept).length;
 	for (const { id } of retired) {
+		// A retired record takes its herdr-core view along; nothing else would know to remove it.
+		await closeCoreView(`${jobsRoot}/${id}`);
 		await rm(`${jobsRoot}/${id}`, { recursive: true, force: true });
 	}
 	return { ids: retired.map((job) => job.id), branches: deleted };
