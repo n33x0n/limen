@@ -3,10 +3,22 @@
 // (236b8e7); `limen continue` resumes the old session with the parent's extensions or a replacement.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { readToolPolicy } from "../src/runtime/tool-policy.ts";
 import {
 	engineEvents,
 	git,
@@ -160,4 +172,48 @@ test("continue resumes the parent's session, linked, with its extensions or a re
 	assert.deepEqual([extensions(kept).at(-1), argv(kept)[argv(kept).indexOf("--model") + 1]], [first, "fixture/other"]);
 	writeFileSync(join(jobDir(p, kept), "tool-policy"), "builtin\n");
 	assert.match(limen(p, ["continue", kept, "say never", "--detached"]).stderr, /invalid .*tool-policy/);
+});
+
+test("a broken tool-policy link is not a missing file: detached launch and continue fail before Pi", () => {
+	const broken = 'ln -sfn missing "$LIMEN_JOB_DIR/tool-policy"';
+	const id = spawnJob(p, "say never", [...FLAGS, "--no-builtin-tools", "--prepare", broken]);
+	assert.equal(waitJob(p, id), "failed");
+	assert.equal(existsSync(join(jobDir(p, id), "fake-argv.json")), false, "Pi never started");
+	assert.match(jobFile(p, id, "log"), /policy link is broken/);
+	const finished = spawnJob(p, "say hi", [...FLAGS, "--no-builtin-tools"]);
+	assert.equal(waitJob(p, finished), "done");
+	const jobs = readdirSync(join(p.root, ".limen/jobs")).length;
+	unlinkSync(join(jobDir(p, finished), "tool-policy"));
+	symlinkSync("missing", join(jobDir(p, finished), "tool-policy"));
+	const continued = limen(p, ["continue", finished, "say never", "--detached"]);
+	assert.match(`${continued.status} ${continued.stderr}`, /1 .*policy link is broken/s);
+	assert.equal(readdirSync(join(p.root, ".limen/jobs")).length, jobs, "continue published no job");
+	const legacy = spawnJob(p, "say hi", FLAGS);
+	assert.equal(waitJob(p, legacy), "done");
+	assert.equal(existsSync(join(jobDir(p, legacy), "tool-policy")), false);
+	assert.equal(argv(legacy).includes("--no-builtin-tools"), false);
+});
+
+test("a present tool-policy entry that cannot be read is an error; no entry is legacy", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "limen-policy-"));
+	const record = join(dir, "tool-policy");
+	assert.equal(await readToolPolicy(dir, "pi"), false, "no directory entry");
+	symlinkSync("missing", record);
+	await assert.rejects(readToolPolicy(dir, "pi"), /policy link is broken/);
+	unlinkSync(record);
+	symlinkSync("tool-policy", record);
+	await assert.rejects(readToolPolicy(dir, "pi"), /ELOOP/);
+	unlinkSync(record);
+	mkdirSync(record);
+	await assert.rejects(readToolPolicy(dir, "pi"), /EISDIR/);
+	rmSync(record, { recursive: true });
+	writeFileSync(record, "no-builtin-tools\n", { mode: 0 });
+	await assert.rejects(readToolPolicy(dir, "pi"), /EACCES/);
+	unlinkSync(record);
+	writeFileSync(record, "off\n");
+	await assert.rejects(readToolPolicy(dir, "pi"), /expected the line/);
+	writeFileSync(record, "no-builtin-tools\n");
+	await assert.rejects(readToolPolicy(dir, "omp"), /only for Pi/);
+	assert.equal(await readToolPolicy(dir, "pi"), true);
+	rmSync(dir, { recursive: true });
 });

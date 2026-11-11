@@ -255,3 +255,13 @@ test("hosted Pi stop records stopped once and closes the job's tab", async () =>
 	const made = [named("tab", "create").length, named("workspace", "create").length];
 	assert.deepEqual(made, [3, 1], "one tab per job, one role space");
 });
+
+test("a broken tool-policy link fails the hosted launch before Pi starts", async () => {
+	const link = 'ln -sfn missing "$LIMEN_JOB_DIR/tool-policy"';
+	const id = spawnJob(p, "say never", ["--tab", "--engine", "pi", "--no-builtin-tools", "--prepare", link], {
+		env,
+	});
+	assert.equal(waitJob(p, id, { env }), "failed");
+	assert.equal(existsSync(join(jobDir(p, id), "fake-argv.json")), false, "Pi never started");
+	assert.match(jobFile(p, id, "log"), /policy link is broken/);
+});
