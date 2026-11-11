@@ -63,6 +63,7 @@ export async function plant(): Promise<Plant> {
 		TMPDIR: tmpdir(),
 		LIMEN_HOME: parent,
 		LIMEN_HERDR: "0",
+		LIMEN_HERDR_CORE: "0",
 		LIMEN_HUNK: "0",
 		GIT_CONFIG_GLOBAL: "/dev/null",
 		GIT_CONFIG_NOSYSTEM: "1",

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
@@ -60,23 +60,28 @@ export async function openCoreView(input: {
 		const id = basename(input.jobDir);
 		const labels = { "herdr.space": space, "limen.job": id, "limen.label": input.label, "limen.state": input.state };
 		const tail = input.follow ? ["-n", "200", "-F"] : ["-n", "+1", "-F"];
-		const started = call(bin, socket, [
-			"run",
-			"--json",
-			"--bg",
-			"--no-parent",
-			"--outlive-parent",
-			"--no-notify",
-			"--name",
-			viewName(input.label, id),
-			"--cwd",
-			input.cwd,
-			...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
-			"--",
-			"tail",
-			...tail,
-			`${input.jobDir}/log`,
-		]);
+		const started = call(
+			bin,
+			socket,
+			[
+				"run",
+				"--json",
+				"--bg",
+				"--no-parent",
+				"--outlive-parent",
+				"--no-notify",
+				"--name",
+				viewName(input.label, id),
+				"--cwd",
+				input.cwd,
+				...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+				"--",
+				"tail",
+				...tail,
+				`${input.jobDir}/log`,
+			],
+			10_000,
+		);
 		const terminal = started.address;
 		if (typeof terminal !== "string" || !terminal) {
 			throw new Error("herdr-core run returned no address");
@@ -116,19 +121,38 @@ export async function reopenCoreView(input: {
 	return `opened ${input.label} in herdr-core as ${view.terminal}`;
 }
 
-/** At finish the view stays open on the final log; its `limen.state` label takes the job's terminal state. */
+/**
+ * At finish the view stays open on the final log; its `limen.state` label takes the job's terminal state. A detached
+ * child does the relabel, as the legacy tab closer does, so finalize never waits on herdr-core.
+ */
 export async function settleCoreView(jobDir: string): Promise<void> {
-	const view = await readCoreView(jobDir);
 	const bin = coreBinary();
-	if (!view) {
+	if (!(await readCoreView(jobDir))) {
 		return;
 	}
 	if (!bin) {
 		return skip(jobDir, "herdr-core is not available; the view keeps its running label");
 	}
+	const from = JSON.stringify(import.meta.url);
+	const relabel = `import { relabelCoreView } from ${from}; await relabelCoreView(${JSON.stringify(bin)}, ${JSON.stringify(jobDir)});`;
+	try {
+		const child = spawn(process.execPath, ["--no-warnings", "--input-type=module", "--eval", relabel], {
+			detached: true,
+			stdio: "ignore",
+		});
+		child.once("error", (error) => void skip(jobDir, `relabel could not start: ${error.message}`));
+		child.unref();
+	} catch (error) {
+		await skip(jobDir, message(error));
+	}
+}
+
+/** The detached relabel: each herdr-core call has its own short timeout; a failure is a line in the job log. */
+export async function relabelCoreView(bin: string, jobDir: string): Promise<void> {
+	const view = await readCoreView(jobDir);
 	try {
 		const state = (await text(`${jobDir}/state`)) || "finished";
-		if (ownedTerminal(bin, view, basename(jobDir))) {
+		if (view && ownedTerminal(bin, view, basename(jobDir))) {
 			call(bin, view.socket, ["label", "--json", view.terminal, `limen.state=${state}`], 5_000);
 		}
 	} catch (error) {
