@@ -42,6 +42,31 @@ rename, move, or close human spaces. Existing job records still focus their
 recorded tabs. If several spaces have the same qualified label, Limen logs an
 `ambiguous Herdr role space` advisory instead of selecting one.
 
+## herdr-core views
+
+The Herdr app shows the `herdr-core` daemon. When `limen spawn --detached` or
+`limen continue --detached` runs inside a herdr-core terminal (`HC_TERMINAL_SOCKET`
+and `HC_TERMINAL_ID` set, `herdr-core` on PATH or named by `LIMEN_HERDR_CORE`;
+`LIMEN_HERDR_CORE=0` turns it off) and `HERDR_ENV` is not `1`, the job gets one
+view: `herdr-core run --bg --no-parent --outlive-parent --no-notify`, running
+`tail -F` on the job log, in the same space as the calling terminal (its
+`herdr.space` label). The view is named after the job label and the job ID's last
+part. Its labels `limen.job`, `limen.label` and `limen.state` name the job; the
+job records the view under `.limen/jobs/<id>/herdr-core/`.
+
+At finish the view stays open on the final log and `limen.state` takes the job's
+state. `limen open` names a live view (herdr-core has no focus verb) or opens a
+new one that shows the whole log. `limen close FNNN` and `limen prune --retire`
+kill and remove the view. Limen touches a terminal only while its `limen.job`
+label names the job. A herdr-core failure is a `herdr-core skipped:` line in the
+job log; the job goes on.
+
+With `HERDR_ENV=1` the legacy `herdr` tabs above apply unchanged. These stay
+legacy-only: hosted `--tab` jobs and group tab mode (they refuse without
+`HERDR_ENV=1`), diff tabs, agent start, send-keys and stop, pane status labels
+and stall reports, Herdr notifications, coordinator wakes by `herdr agent
+prompt`, rule pings, `limen highlight`, and tab columns in `limen status`.
+
 ## Pane readiness is not job completion
 
 | Herdr state | What it means |
