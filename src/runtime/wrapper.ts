@@ -26,6 +26,7 @@ import { setUpJob, worktreeMissing } from "./job-setup.ts";
 import { observeToolStall, ownedToolDescendants, type ToolStallWatch, toolStallMs } from "./stalled-tool.ts";
 import { enterStartQueue, waitForStart } from "./start-queue.ts";
 import { createStreamParser, type StreamEvent } from "./stream.ts";
+import { readToolPolicy } from "./tool-policy.ts";
 import { readWorkerExtensions } from "./worker-extensions.ts";
 
 const STOP_GRACE_MS = 5_000;
@@ -93,6 +94,8 @@ export async function runInternalJob(): Promise<void> {
 		}
 	});
 	const profile = await jobProfile(jobDir);
+	// A malformed policy, or one on an engine that cannot hold it, fails the job before any engine or cloud session.
+	const noBuiltinTools = await readToolPolicy(jobDir, profile.id);
 	// A group member runs on its group's deadline and a Devin job runs in the cloud; both start at once.
 	const gate = !(membership || profile.id === "devin") && (await enterStartQueue(jobDir));
 	// Spawn waits for this handshake, not for the queue or setup, so it returns before prune and --prepare run.
@@ -183,6 +186,7 @@ export async function runInternalJob(): Promise<void> {
 			...((await jobMembership(jobDir)) ? [`${HOOK}/group-peer.ts`] : []),
 			...(await readWorkerExtensions(jobDir, profile.id)),
 		],
+		noBuiltinTools,
 		...(process.env.LIMEN_PROVIDER ? { provider: process.env.LIMEN_PROVIDER } : {}),
 		...(process.env.LIMEN_MODEL ? { model: process.env.LIMEN_MODEL } : {}),
 		...(process.env.LIMEN_THINKING ? { thinking: process.env.LIMEN_THINKING } : {}),

@@ -45,6 +45,7 @@ import {
 } from "../runtime/engine.ts";
 import { liveJob } from "../runtime/reap.ts";
 import { DEFAULT_PRIORITY, parsePriority, queuedLine } from "../runtime/start-queue.ts";
+import { checkToolPolicy } from "../runtime/tool-policy.ts";
 import { normalizeWorkerExtensions } from "../runtime/worker-extensions.ts";
 import { launchHostedSupervisor, launchWrapper } from "../runtime/wrapper.ts";
 import { hunkBinary } from "./diff.ts";
@@ -70,6 +71,7 @@ type SpawnOptions = {
 	role?: string;
 	engine?: string;
 	extensions: string[];
+	noBuiltinTools: boolean;
 };
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export function resolvePreamble(root: string, role: string): string {
@@ -164,6 +166,7 @@ type SpawnedJob = {
 async function spawnJob(args: readonly string[], cwd: string, group?: SpawnGroup): Promise<void> {
 	const parsed = parseSpawnArgs(args);
 	const profile = resolveSpawnEngine(parsed.engine);
+	checkToolPolicy(parsed.noBuiltinTools, profile.id);
 	if (profile.id === "devin") {
 		preflightDevin(parsed, group !== undefined);
 	}
@@ -425,6 +428,7 @@ async function publishSpawnedJob(launch: SpawnLaunch, record: SpawnRecord): Prom
 		priority: launch.options.priority ?? DEFAULT_PRIORITY,
 		...(launch.model ? { model: launch.model } : {}),
 		extensions: launch.extensions,
+		noBuiltinTools: launch.options.noBuiltinTools,
 		planningSource: place.source,
 		finishAuthor: captureFinishAuthor(cwd, launch.loaded.text, Boolean(place.workspace)),
 		...(place.repo ? { repo: place.repo } : {}),
@@ -659,6 +663,7 @@ const SPAWN_FLAGS = {
 	base: { type: "string" },
 	head: { type: "string" },
 	extension: { type: "string", multiple: true },
+	"no-builtin-tools": { type: "boolean" },
 } as const;
 
 function parseSpawnArgs(args: readonly string[]): SpawnOptions {
@@ -666,7 +671,7 @@ function parseSpawnArgs(args: readonly string[]): SpawnOptions {
 		unknown: (word) => `unknown spawn option ${word}`,
 		missing: (flag) => `${flag} requires a value`,
 		repeated: (flag) =>
-			flag === "--review" || flag === "--tab" || flag === "--detached"
+			flag === "--review" || flag === "--tab" || flag === "--detached" || flag === "--no-builtin-tools"
 				? undefined
 				: `${flag} may be supplied only once`,
 		// Every string flag but --extension takes a value that starts with `--`: `--label --tab` labels the job `--tab`.
@@ -704,6 +709,7 @@ function parseSpawnArgs(args: readonly string[]): SpawnOptions {
 	const out: SpawnOptions = {
 		task: taskFile ? "" : task.join(" "),
 		extensions: values.extension ?? [],
+		noBuiltinTools: values["no-builtin-tools"] ?? false,
 		review: values.review ?? false,
 		tab: values.tab ?? false,
 		detached: values.detached ?? false,

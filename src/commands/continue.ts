@@ -42,6 +42,7 @@ import {
 	resolveSpawnEngine,
 } from "../runtime/engine.ts";
 import { jobPriority, parsePriority, queuedLine } from "../runtime/start-queue.ts";
+import { checkToolPolicy, readToolPolicy } from "../runtime/tool-policy.ts";
 import { normalizeWorkerExtensions, readWorkerExtensions } from "../runtime/worker-extensions.ts";
 import { launchWrapper } from "../runtime/wrapper.ts";
 import { parseFlags } from "./flags.ts";
@@ -74,6 +75,7 @@ type ContinueOptions = {
 	readonly timeoutMs: number | undefined;
 	readonly priority: number | undefined;
 	readonly selected: readonly string[];
+	readonly noBuiltinTools: boolean;
 	readonly query: string;
 	readonly instruction: string;
 };
@@ -93,6 +95,7 @@ function parseContinueArgs(args: readonly string[]): ContinueOptions {
 			timeout: { type: "string" },
 			priority: { type: "string" },
 			extension: { type: "string", multiple: true },
+			"no-builtin-tools": { type: "boolean" },
 		} as const,
 		{
 			unknown: (word) => `unknown continue option ${word}`,
@@ -128,6 +131,7 @@ function parseContinueArgs(args: readonly string[]): ContinueOptions {
 		timeoutMs: values.timeout === undefined ? undefined : parseDuration(values.timeout),
 		priority: parsePriority(values.priority),
 		selected: values.extension ?? [],
+		noBuiltinTools: values["no-builtin-tools"] ?? false,
 		query,
 		instruction,
 	};
@@ -153,6 +157,7 @@ type ContinuationRecord = {
 	readonly engine: EngineId;
 	readonly model: string | undefined;
 	readonly extensions: readonly string[];
+	readonly noBuiltinTools: boolean;
 	readonly priority: number;
 	readonly source: PlanningSource;
 	readonly hosted: boolean;
@@ -210,6 +215,7 @@ async function continueJob(args: readonly string[], cwd: string, locked = false,
 	const parent = await readParentJob(root, parentId, parentDir, membership, options.engine);
 	const profile = engineProfile(parent.engine);
 	const extensions = await continuationExtensions(parentDir, membership, options.selected, cwd, profile.id);
+	const noBuiltinTools = await continuationToolPolicy(parentDir, options.noBuiltinTools, profile.id);
 	preflightEngine(profile, chosenModel, provider);
 	const source = recordedPlanningSource(parentDir);
 	const followUp = await continuationTask(root, parentDir, options.instruction, source);
@@ -241,6 +247,7 @@ async function continueJob(args: readonly string[], cwd: string, locked = false,
 		engine: profile.id,
 		model: chosenModel,
 		extensions,
+		noBuiltinTools,
 		// A continuation keeps its parent's place in the start-queue order unless it names its own.
 		priority: options.priority ?? (await jobPriority(parentDir)),
 		source,
@@ -403,6 +410,11 @@ async function continuationExtensions(
 	}
 	return extensions;
 }
+/** A protected parent keeps every continuation protected, whatever its extensions or model; the flag only adds it. */
+async function continuationToolPolicy(parentDir: string, requested: boolean, engine: EngineId): Promise<boolean> {
+	checkToolPolicy(requested, engine);
+	return (await readToolPolicy(parentDir, engine)) || requested;
+}
 /** Private planning: carry the parent's canonical ticket and check every pointer before a record exists. */
 async function continuationTask(
 	root: string,
@@ -455,6 +467,7 @@ async function publishContinuation(record: ContinuationRecord): Promise<void> {
 		engine: record.engine,
 		priority: record.priority,
 		extensions: record.extensions,
+		noBuiltinTools: record.noBuiltinTools,
 		...(record.model ? { model: record.model } : {}),
 		planningSource: record.source,
 		parent: parent.id,

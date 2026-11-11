@@ -23,6 +23,8 @@ export type EngineArgv = {
 	readonly label: string;
 	readonly preamble: string;
 	readonly extensions: readonly string[];
+	/** The job's `tool-policy`: Pi parses this flag before it loads an extension or restores the transcript. */
+	readonly noBuiltinTools?: boolean;
 	readonly provider?: string;
 	readonly model?: string;
 	readonly thinking?: string;
@@ -235,7 +237,14 @@ export function argvFor(profile: EngineProfile, slots: EngineArgv): string[] {
 	if (profile.toolYolo) {
 		args.push("--auto-approve");
 	}
-	args.push("--no-extensions", "--session-dir", `${slots.jobDir}/session`);
+	args.push("--no-extensions");
+	if (slots.noBuiltinTools) {
+		if (profile.id !== "pi") {
+			throw new Error(`${profile.id} cannot run a job with --no-builtin-tools`);
+		}
+		args.push("--no-builtin-tools");
+	}
+	args.push("--session-dir", `${slots.jobDir}/session`);
 	if (profile.sessionName) {
 		args.push("--name", `limen: ${slots.label}`);
 	}

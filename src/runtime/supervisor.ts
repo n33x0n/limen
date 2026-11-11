@@ -42,6 +42,7 @@ import { setUpJob, worktreeMissing } from "./job-setup.ts";
 import { prepareRecoveredOwner } from "./recovery.ts";
 import { observeToolStall, type ToolStallWatch } from "./stalled-tool.ts";
 import { assistantStopReason, assistantText } from "./stream.ts";
+import { readToolPolicy } from "./tool-policy.ts";
 import { readWorkerExtensions } from "./worker-extensions.ts";
 
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -379,6 +380,7 @@ async function hostedEngineLaunch(jobDir: string): Promise<{ profile: EngineProf
 			].map((name) => `${PACKAGE_ROOT}/hook/${name}.ts`),
 			...(await readWorkerExtensions(jobDir, profile.id)),
 		],
+		noBuiltinTools: await readToolPolicy(jobDir, profile.id),
 		...(process.env.LIMEN_PROVIDER ? { provider: process.env.LIMEN_PROVIDER } : {}),
 		...(process.env.LIMEN_MODEL ? { model: process.env.LIMEN_MODEL } : {}),
 		...(process.env.LIMEN_THINKING ? { thinking: process.env.LIMEN_THINKING } : {}),

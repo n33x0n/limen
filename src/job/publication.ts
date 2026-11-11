@@ -3,6 +3,7 @@ import { copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { basename, dirname } from "node:path";
 import type { EngineId } from "../runtime/engine.ts";
+import { NO_BUILTIN_TOOLS } from "../runtime/tool-policy.ts";
 import { groupLock } from "./group-cabinet.ts";
 import { SESSION_ID } from "./job.ts";
 
@@ -74,6 +75,8 @@ type NewJob = {
 	/** The model the spawner asked for, compared with the served model in `limen jobs <id>`. */
 	readonly model?: string;
 	readonly extensions?: readonly string[];
+	/** Writes `tool-policy`; a job without it keeps Pi's default tools. */
+	readonly noBuiltinTools?: boolean;
 	readonly planningSource: string;
 	readonly repo?: string;
 	readonly agentName?: string;
@@ -119,11 +122,10 @@ export async function publishJob(jobDir: string, job: NewJob): Promise<void> {
 			starting: `${process.pid}\n`,
 			...(job.priority ? { priority: `${job.priority}\n` } : {}),
 			...(job.model ? { model: `${job.model}\n` } : {}),
+			...(job.noBuiltinTools ? { "tool-policy": `${NO_BUILTIN_TOOLS}\n` } : {}),
+			...(job.repo ? { repo: `${job.repo}\n` } : {}),
 			...job.carried,
 		};
-		if (job.repo) {
-			files.repo = `${job.repo}\n`;
-		}
 		if (job.agentName) {
 			files.hosted = hostedNote(job.group?.deadline);
 			files["agent-name"] = `${job.agentName}\n`;
