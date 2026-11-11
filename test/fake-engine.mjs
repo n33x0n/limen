@@ -3,7 +3,7 @@
 // what it saw in the record dir (the parent of --session-dir, so a job's own dir). Script lines:
 //   commit · fail <code> · error (assistant stop reason "error") · say <text> · tool <command> · block · orphan · finish <handoff, \n ends a line>
 //   · idle (a bash tool whose one child waits without CPU) · /<command> <args> (runs a command a hook registered, as a user typing it)
-// `block` writes fake-blocked-<n> and waits for one write to the FIFO fake-gate. Records: fake-argv.json, fake-env.json
+// `block` writes fake-blocked-<n> and waits for its own FIFO fake-gate-<n>. Records: fake-argv.json, fake-env.json
 // (variable names), fake-task.txt, fake-system.txt (system prompt after before_agent_start), fake-context.txt (the hidden
 // context messages before_agent_start returned), fake-events.jsonl, and one transcript line per run in --session-dir.
 import { execFileSync, spawn } from "node:child_process";
@@ -103,11 +103,11 @@ async function turn(messages, reply, stopReason) {
 }
 let blocks = 0;
 async function block() {
-	const gate = join(dir, "fake-gate");
+	blocks += 1;
+	const gate = join(dir, `fake-gate-${blocks}`);
 	if (!existsSync(gate)) {
 		execFileSync("mkfifo", [gate]);
 	}
-	blocks += 1;
 	const released = new Promise((resolve) => createReadStream(gate).once("data", resolve));
 	writeFileSync(join(dir, `fake-blocked-${blocks}`), "");
 	await released;

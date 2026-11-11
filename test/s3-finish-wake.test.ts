@@ -5,7 +5,7 @@
 // the delivered record exists every wake the job will cause for that session is already recorded.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { open, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -79,6 +79,20 @@ after(async () => {
 		session.kill();
 	}
 	await p.cleanup();
+});
+
+test("successive fake blocks use distinct FIFOs and release without a pause", async () => {
+	const dir = coordinator("gates", "gates", "block\nblock\n");
+	await until(dir, () => existsSync(join(dir, "fake-blocked-1")));
+	const first = statSync(join(dir, "fake-gate-1"));
+	assert.ok(first.isFIFO());
+	await release(dir);
+	await until(dir, () => existsSync(join(dir, "fake-blocked-2")));
+	const second = statSync(join(dir, "fake-gate-2"));
+	assert.ok(second.isFIFO());
+	assert.notEqual(first.ino, second.ino, "a previous writer's EOF cannot reach the next block");
+	await release(dir, 2);
+	await until(dir, () => engineEvents(dir).some((event) => event.event === "exit"));
 });
 
 test("a job that ends done, failed or on a provider error wakes its session once, with two listeners on that session", async () => {

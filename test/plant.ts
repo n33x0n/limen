@@ -178,7 +178,7 @@ export function until(dir: string, check: () => boolean): Promise<void> {
 /** Waits until the fake engine reaches its `n`th `block` in `dir`, then releases it. */
 export async function release(dir: string, n = 1): Promise<void> {
 	await until(dir, () => existsSync(join(dir, `fake-blocked-${n}`)));
-	await writeFile(join(dir, "fake-gate"), "go\n");
+	await writeFile(join(dir, `fake-gate-${n}`), "go\n");
 }
 
 /** What the fake engine received through the extension API: steers, follow-ups, messages, notices, its exit. */
