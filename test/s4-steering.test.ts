@@ -130,8 +130,8 @@ test("a worker prompt carries register and styleguide once, vision and board poi
 test("continue resumes the parent's session, linked, with its extensions or a replacement", () => {
 	const parentRecord = jobFile(p, parent, "extensions.json");
 	const transcript = readFileSync(join(jobDir(p, parent), "session/fake.jsonl"), "utf8");
-	const continued = (flags: readonly string[]) => {
-		const run = limen(p, ["continue", parent, "say next", "--detached", ...flags]);
+	const continued = (flags: readonly string[], from = parent) => {
+		const run = limen(p, ["continue", from, "say next", "--detached", ...flags]);
 		assert.equal(run.status, 0, run.stderr);
 		const id = run.stdout.trim().split("\n").at(-1) ?? "";
 		assert.equal(waitJob(p, id), "done");
@@ -151,4 +151,13 @@ test("continue resumes the parent's session, linked, with its extensions or a re
 	assert.equal([parent, inherited, replaced].map((id) => jobFile(p, id, "priority")).join(), "3,3,1");
 	assert.equal(extensions(replaced).includes(first), false);
 	assert.equal(jobFile(p, parent, "extensions.json"), parentRecord);
+	// --no-builtin-tools: a continuation adds it; no later extension or model choice removes it.
+	const guarded = continued(["--no-builtin-tools"], replaced);
+	const kept = continued(["--extension", first, "--model", "fixture/other"], guarded);
+	const policy = (id: string) => `${jobFile(p, id, "tool-policy")} ${argv(id).includes("--no-builtin-tools")}`;
+	const chain = [parent, inherited, replaced, guarded, kept].map(policy).join();
+	assert.equal(chain, " false, false, false,no-builtin-tools true,no-builtin-tools true");
+	assert.deepEqual([extensions(kept).at(-1), argv(kept)[argv(kept).indexOf("--model") + 1]], [first, "fixture/other"]);
+	writeFileSync(join(jobDir(p, kept), "tool-policy"), "builtin\n");
+	assert.match(limen(p, ["continue", kept, "say never", "--detached"]).stderr, /invalid .*tool-policy/);
 });

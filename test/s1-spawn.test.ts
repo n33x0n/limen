@@ -53,6 +53,8 @@ test("each spawn refusal exits 1, names its cause and leaves no job, worktree or
 		[["--engine", "devin", "--thinking", "high", "work"], "--thinking"],
 		[["--engine", "devin", "--provider", "windows", "work"], "macos or linux"],
 		[["--engine", "devin", "work"], "DEVIN_API_KEY"],
+		[["--engine", "omp", "--no-builtin-tools", "work"], "only for Pi"],
+		[["--engine", "devin", "--no-builtin-tools", "work"], "only for Pi"],
 	];
 	for (const [args, cause, env] of refusals) {
 		const run = limen(p, ["spawn", ...args], env ? { env } : {});

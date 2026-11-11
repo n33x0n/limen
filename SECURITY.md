@@ -2,7 +2,7 @@
 
 This tool is process/worktree isolation, not a hostile-code sandbox.
 
-`limen spawn` launches `pi --approve` as the calling user, or `omp --auto-approve` when `--engine omp` is selected. A worker can run the same commands you can, read the same environment, and write wherever you can write. Review candidate diffs before merging. Do not point `limen` at an untrusted repository if that would expose credentials. Pi and OMP keep separate auth stores (`~/.pi`, `~/.omp`).
+`limen spawn` launches `pi --approve` as the calling user, or `omp --auto-approve` when `--engine omp` is selected. A worker can run the same commands you can, read the same environment, and write wherever you can write. `limen spawn --no-builtin-tools` removes Pi's built-in tools from one job and its continuations ([details](docs/commands.md#start-and-continue-jobs)); its extensions and the engine process keep that access. Review candidate diffs before merging. Do not point `limen` at an untrusted repository if that would expose credentials. Pi and OMP keep separate auth stores (`~/.pi`, `~/.omp`).
 
 Windows is unsupported. PID and process-group signals are POSIX-only.
 

@@ -94,8 +94,6 @@ export async function runInternalJob(): Promise<void> {
 		}
 	});
 	const profile = await jobProfile(jobDir);
-	// A malformed policy, or one on an engine that cannot hold it, fails the job before any engine or cloud session.
-	const noBuiltinTools = await readToolPolicy(jobDir, profile.id);
 	// A group member runs on its group's deadline and a Devin job runs in the cloud; both start at once.
 	const gate = !(membership || profile.id === "devin") && (await enterStartQueue(jobDir));
 	// Spawn waits for this handshake, not for the queue or setup, so it returns before prune and --prepare run.
@@ -131,6 +129,9 @@ export async function runInternalJob(): Promise<void> {
 	const timeoutMs = membership
 		? Math.max(1, Math.min(configuredTimeout, (membership.member?.deadline ?? membership.run.deadline) - Date.now()))
 		: configuredTimeout;
+	// Read after setup, as the hosted supervisor does: a malformed policy, or one on an engine that cannot hold it,
+	// fails the job before any engine or cloud session starts.
+	const noBuiltinTools = await readToolPolicy(jobDir, profile.id);
 	if (profile.id === "devin") {
 		await runDevinJob({
 			jobDir,

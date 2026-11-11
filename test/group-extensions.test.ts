@@ -1,8 +1,8 @@
 // Group extension selections: one plant per test, the fake engine as `pi` (it records the argv it got), real bin/limen.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import test from "node:test";
 import { type GroupRun, readRun } from "../src/job/group-cabinet.ts";
 import { git, jobDir, limen, plant, type RunOptions, TICKET, waitJob } from "./plant.ts";
@@ -10,7 +10,8 @@ import { git, jobDir, limen, plant, type RunOptions, TICKET, waitJob } from "./p
 const lead = { PI_SESSION_ID: "extension-lead" };
 const route = ["--engine", "pi", "--provider", "fixture", "--model", "fixture", "--thinking", "high"];
 const team = "pi:fixture/fixture:high";
-const settings = ["--team", team, "--team", team, "--workers", "3", "--timeout", "30m"];
+const TAMPER = 'printf x >"$LIMEN_JOB_DIR/tool-policy"';
+const settings = ["--team", team, "--team", team, "--workers", "4", "--timeout", "30m"];
 // Exercise the hosted supervisor and its real launch argv without a GUI or provider.
 const herdr = `#!/usr/bin/env node
 const fs = require('node:fs');
@@ -70,11 +71,13 @@ async function fixture(hosted = false) {
 	const launch = (group: GroupRun, team: string, ...extra: string[]) =>
 		run(["spawn", "candidate", ...route, mode, ...extra], { env: member(group, team) });
 	const resume = (id: string, ...extra: string[]) => run(["continue", id, "follow-up", ...route, mode, ...extra]);
-	const checkJob = async (id: string, selected: string[]) => {
+	const checkJob = async (id: string, selected: string[], guarded = false) => {
 		assert.equal(waitJob(p, id), "done");
 		assert.deepEqual(JSON.parse(await readFile(join(jobDir(p, id), "extensions.json"), "utf8")), selected);
 		const argv: string[] = JSON.parse(await readFile(join(jobDir(p, id), "fake-argv.json"), "utf8"));
 		assert.ok(argv.includes("--no-extensions"));
+		const policy = await readFile(join(jobDir(p, id), "tool-policy"), "utf8").catch(() => "");
+		assert.deepEqual([policy, argv.includes("--no-builtin-tools")], [guarded ? "no-builtin-tools\n" : "", guarded]);
 		const loaded = argv.flatMap((arg, index) => (arg === "--extension" ? [argv[index + 1]] : []));
 		for (const hook of ["finish", "steering", "communication", "group-peer"]) {
 			assert.equal(loaded.filter((path) => path?.endsWith(`/hook/${hook}.ts`)).length, 1);
@@ -113,10 +116,11 @@ for (const hosted of [false, true]) {
 				run,
 				coordinator.team,
 				...(coordinator.team === "team-1" ? expected.flatMap((path) => ["--extension", path]) : []),
+				"--no-builtin-tools",
 			);
 			assert.equal(child.status, 0, child.stderr);
 			const id = lastLine(child.stdout);
-			await f.checkJob(id, expected);
+			await f.checkJob(id, expected, true);
 			const bad = f.resume(id, "--extension", f.privatePath);
 			assert.match(`${bad.status} ${bad.stderr}`, /^1 .*recorded team extensions/s);
 			const record = join(jobDir(f, id), "extensions.json");
@@ -126,7 +130,7 @@ for (const hosted of [false, true]) {
 			const continued = f.resume(id);
 			assert.equal(continued.status, 0, continued.stderr);
 			const continuedId = lastLine(continued.stdout);
-			await f.checkJob(continuedId, expected);
+			await f.checkJob(continuedId, expected, true);
 			const entry = (await readRun(f.root, run.id)).members.find((entry) => entry.id === continuedId);
 			assert.deepEqual([entry?.parent, entry?.team], [id, coordinator.team]);
 			assert.ok(entry && entry.deadline <= run.deadline - run.reserveMs);
@@ -135,6 +139,10 @@ for (const hosted of [false, true]) {
 			const review = f.launch(run, coordinator.team, "--review", "--branch", branch);
 			assert.equal(review.status, 0, review.stderr);
 			await f.checkJob(lastLine(review.stdout), expected);
+			// A record changed after spawn fails the launch before the engine starts.
+			const tampered = jobDir(f, lastLine(f.launch(run, coordinator.team, "--prepare", TAMPER).stdout));
+			const failed = waitJob(f, basename(tampered)) + readFileSync(join(tampered, "log"), "utf8");
+			assert.match(failed + existsSync(join(tampered, "fake-argv.json")), /^failed.*invalid .*tool-policy.*false$/s);
 			assert.equal(f.resume(continuedId).status, 1, "continuation uses the total launch allowance");
 			assert.match(f.resume(coordinator.id).stderr, /next group round/);
 		}
