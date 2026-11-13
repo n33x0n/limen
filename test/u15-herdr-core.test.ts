@@ -34,7 +34,7 @@ test("herdr-core views: argv, record, final state, open, close, prune; legacy ro
 	const [log, suffix] = [join(jobDir(p, id), "log"), id.split("-").at(-1)];
 	assert.deepEqual(calls(), [
 		"[get,t10]",
-		`[run,--bg,--no-parent,--outlive-parent,--no-notify,--name,f001-core-view-${suffix},--cwd,${p.root},` +
+		`[run,--bg,--outlive-parent,--no-notify,--name,f001-core-view-${suffix},--cwd,${p.root},` +
 			`--label,herdr.space=sp1,--label,limen.job=${id},--label,limen.label=F001 core view,` +
 			`--label,limen.state=running,--,tail,-n,200,-F,${log}]`,
 	]);

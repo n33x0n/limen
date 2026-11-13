@@ -67,7 +67,6 @@ export async function openCoreView(input: {
 				"run",
 				"--json",
 				"--bg",
-				"--no-parent",
 				"--outlive-parent",
 				"--no-notify",
 				"--name",
