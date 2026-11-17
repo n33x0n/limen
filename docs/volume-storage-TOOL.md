@@ -4,7 +4,11 @@ Opt-in local storage for new Limen job directories and repository worktrees. Exi
 
 ## Configuration
 
-The seat file `~/.config/limen/volume-storage.json` is an object with exactly `mount` (absolute mountpoint path) and `uuid` (Linux filesystem UUID). An absent file preserves upstream behavior. An invalid file or unavailable filesystem is an error, never a reason to use the system disk. This file is local operator configuration, not repository content. The mounted directory `limen-managed` must be writable by the seat user.
+The seat file `~/.config/limen/volume-storage.json` accepts either exactly `mount` (absolute normalized mountpoint) and `uuid` (Linux filesystem UUID), or exactly those fields plus `workspace` (absolute normalized workspace) and `layout: "named"`. An absent file preserves upstream behavior. The old two-field form preserves managed-hash storage. Invalid configuration or an unavailable filesystem refuses; it never falls back to the system disk. This is local operator configuration, not repository content.
+
+Named mode stores workspace jobs at `<mount>/limen-jobs/workspace`, independent immediate-child plant jobs at `<mount>/limen-jobs/plants/<child>`, ordinary worktree containers at `<mount>/limen-worktrees/<repo-directory>`, and historical containers at `<mount>/limen-worktrees/_legacy/<old-container-without-leading-dot>`. `_legacy` is reserved. Job ownership comes from the lexical cabinet under the configured workspace, not its symlink destination or a temporary worktree. Worktree ownership comes from the repository's Git common directory. Unknown or ambiguous shapes refuse.
+
+Named roots and leaves must be physical directories on the configured filesystem, without symlink components or bind aliases. An existing visible path is accepted only when its device and inode equal the canonical named directory. Legacy hash destinations are never adopted as canonical storage. An existing canonical destination without the matching visible alias refuses as a collision; publication races accept only exact identity. No host migration, archive lookup, or record rewriting is performed.
 
 ## Invariants
 
@@ -16,4 +20,4 @@ The seat file `~/.config/limen/volume-storage.json` is an object with exactly `m
 
 ## Verification
 
-Exercise spawn and continuation in isolated fixture repositories, verify actual device identities, missing/mismatched-volume refusal and existing paths, then independently review the exact commit. This is a local CLI, not an MCP server; the MCP-specific check-tool protocol does not apply.
+Use one focused synthetic verification for new publication, reads, continuation, Git and project-scoped prune; old configs and aliases; wrong UUID, same-device/different-inode aliases, hash targets, collisions, and symlink escapes. This is a local CLI, not an MCP server; the MCP-specific check-tool protocol does not apply.
