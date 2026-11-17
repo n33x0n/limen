@@ -33,6 +33,7 @@ import {
 	privatePlanningTask,
 	ticketPointers,
 } from "../project/planning.ts";
+import { checkVolumeStorage, prepareVolumePath } from "../project/volume-storage.ts";
 import { signalProcessGroup, waitForProcessGroup } from "../runtime/contain.ts";
 import { preflightDevin } from "../runtime/devin.ts";
 import {
@@ -98,6 +99,7 @@ export async function spawnCommand(
 	cwd: string,
 	coordinator?: { run: GroupRun; team: string },
 ): Promise<void> {
+	checkVolumeStorage();
 	const identity = coordinator ? undefined : await groupIdentity(cwd);
 	const group = coordinator
 		? { run: coordinator.run, team: coordinator.team, role: "coordinator" as const }
@@ -322,9 +324,11 @@ async function recordSpawnedJob(launch: SpawnLaunch): Promise<void> {
 	const preamble = resolvePreamble(root, role);
 	const id = makeJobId(options.label);
 	const jobsRoot = `${root}/.limen/jobs`;
+	prepareVolumePath(jobsRoot);
 	await mkdir(jobsRoot, { recursive: true });
 	const branch = options.branch ?? `limen/${id}`;
 	const worktreeRoot = `${dirname(repository)}/.${basename(repository)}-limen-worktrees`;
+	prepareVolumePath(worktreeRoot);
 	const requestedPath = `${worktreeRoot}/${id}`;
 	await mkdir(worktreeRoot, { recursive: true });
 	const plan = await planWorktree({

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { herdrAvailable, openWatchTab } from "../integrations/herdr.ts";
 import {
 	claimMember,
@@ -33,6 +34,7 @@ import {
 	recordedPlanningSource,
 	ticketPointers,
 } from "../project/planning.ts";
+import { checkVolumeStorage, prepareVolumePath } from "../project/volume-storage.ts";
 import {
 	defaultModel,
 	type EngineId,
@@ -201,6 +203,7 @@ async function continueJob(args: readonly string[], cwd: string, locked = false,
 
 	// A job that continues from its own worktree resolves jobs in its canonical root.
 	const inherited = workspaceRoot(cwd) ? undefined : inheritedPlanning(repoRoot(cwd));
+	checkVolumeStorage();
 	const root = inherited?.root ?? (await commandRoot(cwd));
 	const { id: parentId, jobDir: parentDir } = await resolveJob(root, options.query, "control");
 	const membership = await jobMembership(parentDir);
@@ -224,6 +227,8 @@ async function continueJob(args: readonly string[], cwd: string, locked = false,
 	const jobDir = `${root}/.limen/jobs/${id}`;
 	const role = review ? "reviewer" : (await text(`${parentDir}/role`)) || "worker";
 	const preamble = resolvePreamble(root, role);
+	prepareVolumePath(`${root}/.limen/jobs`);
+	prepareVolumePath(dirname(parent.worktree));
 	const slot = round === undefined ? "worker" : "coordinator";
 	const member = membership?.member
 		? await claimMember(membership.run, membership.member.team, slot, id, parentId, round)

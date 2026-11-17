@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { hasCommit, isGitRepository, NO_COMMIT, repoRoot, workspaceRoot } from "../project/git.ts";
 import { formatDrift, listDrift, removeHookCopies } from "../project/inherit.ts";
 import { registerProject } from "../project/seat.ts";
+import { prepareVolumePath } from "../project/volume-storage.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export async function initCommand(args: readonly string[], cwd: string): Promise<void> {
@@ -66,6 +67,7 @@ export async function workspaceCommand(args: readonly string[], cwd: string): Pr
 	await initialize(resolve(cwd), false);
 }
 async function initialize(root: string, repository: boolean): Promise<void> {
+	prepareVolumePath(`${root}/.limen/jobs`);
 	const copies = [
 		[`${ROOT}/templates/styleguide.md`, `${root}/.agents/limen/styleguide.md`],
 		[`${ROOT}/templates/spec/vision.md`, `${root}/spec/vision.md`],
