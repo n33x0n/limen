@@ -380,7 +380,7 @@ async function jobIds(jobsRoot: string): Promise<string[]> {
 		}
 		throw error;
 	});
-	return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+	return entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name);
 }
 function resolved(path: string): Promise<string> {
 	return realpath(path).then(

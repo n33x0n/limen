@@ -22,3 +22,18 @@ test("a missing configured volume refuses spawn and continuation without creatin
 		await p.cleanup();
 	}
 });
+
+test("publication staging is invisible to job listing and retained by prune", async () => {
+	const p = await plant();
+	try {
+		const jobs = join(p.root, ".limen", "jobs");
+		const staging = join(jobs, ".publishing-test-job");
+		await mkdir(staging);
+		assert.equal(limen(p, ["jobs"]).stdout.trim(), "no jobs");
+		const result = limen(p, ["prune"]);
+		assert.equal(result.status, 0, result.stderr);
+		assert.ok((await readdir(jobs)).includes(".publishing-test-job"));
+	} finally {
+		await p.cleanup();
+	}
+});

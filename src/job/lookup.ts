@@ -14,7 +14,7 @@ export async function resolveJob(
 		}
 		throw error;
 	});
-	const ids = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+	const ids = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name);
 	const labels: Record<string, string> = {};
 	for (const id of ids) {
 		labels[id] = await text(`${jobsRoot}/${id}/label`);

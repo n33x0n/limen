@@ -144,7 +144,7 @@ async function jobIds(jobsRoot: string): Promise<string[]> {
 		throw error;
 	});
 	return entries
-		.filter((entry) => entry.isDirectory())
+		.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
 		.map((entry) => entry.name)
 		.sort();
 }

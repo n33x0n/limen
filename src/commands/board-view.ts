@@ -128,7 +128,7 @@ function landedJobs(done: readonly BoardJob[]): ReadonlySet<string> {
 async function readJobs(root: string): Promise<BoardJob[]> {
 	const jobsRoot = join(root, ".limen", "jobs");
 	const entries = await readdir(jobsRoot, { withFileTypes: true }).catch(() => []);
-	const ids = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+	const ids = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name);
 	return Promise.all(
 		ids.map(async (id) => {
 			const dir = join(jobsRoot, id);

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { basename, dirname } from "node:path";
 import type { EngineId } from "../runtime/engine.ts";
@@ -99,7 +99,7 @@ type NewJob = {
 export async function publishJob(jobDir: string, job: NewJob): Promise<void> {
 	const jobsRoot = dirname(jobDir);
 	await mkdir(jobsRoot, { recursive: true });
-	const publishing = `${dirname(await realpath(jobsRoot))}/.publishing-${basename(jobDir)}`;
+	const publishing = `${jobsRoot}/.publishing-${basename(jobDir)}`;
 	await mkdir(publishing);
 	try {
 		const startedAt = `${new Date().toISOString()}\n`;

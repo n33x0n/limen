@@ -46,7 +46,7 @@ export async function jobsCommand(args: readonly string[], cwd: string): Promise
 		console.log(human ? humanDetail(loaded.record, paint) : loaded.compact);
 		return;
 	}
-	const ids = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+	const ids = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name);
 	if (ids.length === 0) {
 		console.log("no jobs");
 		return;
