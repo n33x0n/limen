@@ -150,7 +150,11 @@ export async function settleCoreView(jobDir: string): Promise<void> {
 export async function closeCoreView(jobDir: string): Promise<boolean> {
 	const view = await readCoreView(jobDir);
 	const bin = coreBinary();
-	if (!(view && bin)) {
+	if (!view) {
+		return false;
+	}
+	if (!bin) {
+		await skip(jobDir, "herdr-core is not available; the view stays open");
 		return false;
 	}
 	try {
@@ -196,15 +200,11 @@ function coordinatorSpace(bin: string, socket: string): string | undefined {
 
 /**
  * The recorded terminal, only while its `limen.job` label names this job; a terminal someone else made is never
- * touched. Undefined when it is gone or not ours.
+ * touched. Undefined when it is gone or not ours; lookup failures propagate to the caller.
  */
 function ownedTerminal(bin: string, view: CoreView, id: string): Record<string, unknown> | undefined {
-	try {
-		const row = call(bin, view.socket, ["get", "--json", view.terminal], 5_000);
-		return asRecord(row.labels)["limen.job"] === id ? row : undefined;
-	} catch {
-		return;
-	}
+	const row = call(bin, view.socket, ["get", "--json", view.terminal], 5_000);
+	return asRecord(row.labels)["limen.job"] === id ? row : undefined;
 }
 
 /** `kill` hangs up and escalates; `rm` takes only a finished terminal, so it retries while the program ends. */
@@ -250,6 +250,15 @@ function call(bin: string, socket: string, args: readonly string[], timeout = 15
 		throw result.error;
 	}
 	if (result.status !== 0) {
+		if (args[0] === "get" && result.status === 3) {
+			try {
+				if (asRecord(asRecord(JSON.parse(result.stderr)).error).kind === "not_found") {
+					return {};
+				}
+			} catch {
+				// A malformed error response is a lookup failure, not proof that the terminal is gone.
+			}
+		}
 		throw new Error(
 			`herdr-core ${args[0]}: ${result.stderr.trim() || result.stdout.trim() || `exit ${result.status}`}`,
 		);

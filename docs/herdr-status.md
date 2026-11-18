@@ -60,6 +60,8 @@ state, log and result stay. `limen open` inside herdr-core opens a new view that
 shows the whole log. `limen close FNNN` and `limen prune --retire` also remove
 views. Limen touches a terminal only while its `limen.job` label names the job.
 A herdr-core failure is a `herdr-core skipped:` line in the job log; the job goes on.
+If lookup or removal fails, Limen keeps the view record so a later close can retry.
+A missing terminal or one owned by another job only clears the stale record.
 
 With `HERDR_ENV=1` the legacy `herdr` tabs above apply unchanged. These stay
 legacy-only: hosted `--tab` jobs and group tab mode (they refuse without

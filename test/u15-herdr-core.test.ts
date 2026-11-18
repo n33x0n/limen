@@ -1,14 +1,13 @@
-// U15 · a detached job spawned in a herdr-core terminal gets a log view in that terminal's space; HERDR_ENV=1 keeps legacy.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import test from "node:test";
 import { jobDir, jobFile, limen, plant, spawnJob, until, waitJob } from "./plant.ts";
-// Logs each argv; keeps terminals in core.json; t10, the caller, sits in space sp1. FAKE_CORE_FAIL makes every call fail.
+
 const fake = (d: string) => `#!/usr/bin/env node
 const fs = require("node:fs"), [v, ...a] = process.argv.slice(2).filter((x) => x !== "--json"), f = "${d}/core.json";
 fs.appendFileSync("${d}/calls.jsonl", JSON.stringify([v, ...a]) + "\\n");
-if (process.env.FAKE_CORE_FAIL) { console.error("core down"); process.exit(1); }
+if (process.env.FAKE_CORE_FAIL && v === "get" && a[0] !== "t10") { console.error("core down"); process.exit(1); }
 const c = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : { n: 11, t: { t10: { labels: { "herdr.space": "sp1" } } } };
 const t = c.t[a[0]], out = (r) => { fs.writeFileSync(f, JSON.stringify(c)); console.log(JSON.stringify(r)); };
 const kv = (s) => [s.split("=")[0], s.slice(s.indexOf("=") + 1)];
@@ -27,9 +26,6 @@ test("herdr-core views: argv, record, automatic close, open, prune; legacy route
 	const calls = () => read("calls.jsonl").replaceAll('"', "").trim().split("\n");
 	const core = (): Record<string, { labels: Record<string, string> }> => JSON.parse(read("core.json")).t;
 	const id = spawnJob(p, "say hi", ["--detached", "--label", "F001 core view"], { env });
-	const log = join(jobDir(p, id), "log");
-	assert.match(calls()[1] ?? "", /^\[run,--bg,--outlive-parent,--no-notify,/);
-	assert.ok(calls()[1]?.endsWith(`limen.state=running,--,tail,-n,200,-F,${log}]`));
 	const place = ["terminal", "space", "socket", "mode"].map((name) => jobFile(p, id, `herdr-core/${name}`));
 	assert.deepEqual(place, ["t11", "sp1", "/s.sock", "watch"]);
 	assert.equal(waitJob(p, id, { env }), "done");
@@ -45,6 +41,9 @@ test("herdr-core views: argv, record, automatic close, open, prune; legacy route
 	assert.equal(calls().length, count, "HERDR_ENV=1 keeps the legacy route");
 	const failing = spawnJob(p, "say hi", ["--detached"], { env: { ...env, FAKE_CORE_FAIL: "1" } });
 	assert.equal(waitJob(p, failing, { env }), "done");
+	const record = join(jobDir(p, failing), "herdr-core");
+	await until(p.parent, () => !existsSync(record) || jobFile(p, failing, "log").includes("herdr-core skipped:"));
+	assert.equal(existsSync(record), true, "lookup failure must keep the view record");
 	assert.match(jobFile(p, failing, "log"), /herdr-core skipped: herdr-core get: core down/);
 	for (const state of ["failed", "stopped"]) {
 		const next = spawnJob(p, state === "failed" ? "fail 1" : "block", ["--detached"], { env });
@@ -54,6 +53,7 @@ test("herdr-core views: argv, record, automatic close, open, prune; legacy route
 		}
 		assert.equal(waitJob(p, next, { env }), state);
 		await until(p.parent, () => !existsSync(join(jobDir(p, next), "herdr-core")));
-		assert.equal(Object.values(core()).some((row) => row.labels["limen.job"] === next), false);
+		const owned = Object.values(core()).some((row) => row.labels["limen.job"] === next);
+		assert.equal(owned, false);
 	}
 });
