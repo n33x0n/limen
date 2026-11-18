@@ -26,6 +26,7 @@ test("herdr-core views: argv, record, automatic close, open, prune; legacy route
 	const calls = () => read("calls.jsonl").replaceAll('"', "").trim().split("\n");
 	const core = (): Record<string, { labels: Record<string, string> }> => JSON.parse(read("core.json")).t;
 	const id = spawnJob(p, "say hi", ["--detached", "--label", "F001 core view"], { env });
+	assert.match(calls()[1] ?? "", /^\[run,--bg,--outlive-parent,--no-notify,/);
 	const place = ["terminal", "space", "socket", "mode"].map((name) => jobFile(p, id, `herdr-core/${name}`));
 	assert.deepEqual(place, ["t11", "sp1", "/s.sock", "watch"]);
 	assert.equal(waitJob(p, id, { env }), "done");
@@ -53,7 +54,6 @@ test("herdr-core views: argv, record, automatic close, open, prune; legacy route
 		}
 		assert.equal(waitJob(p, next, { env }), state);
 		await until(p.parent, () => !existsSync(join(jobDir(p, next), "herdr-core")));
-		const owned = Object.values(core()).some((row) => row.labels["limen.job"] === next);
-		assert.equal(owned, false);
+		assert.equal(JSON.stringify(core()).includes(next), false);
 	}
 });
