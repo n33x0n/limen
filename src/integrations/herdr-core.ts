@@ -5,7 +5,7 @@ import { basename } from "node:path";
 
 /**
  * A job's view in herdr-core, the daemon behind the Herdr app: one terminal that follows the job log, in the space of
- * the terminal that spawned the job. Legacy `herdr` (HERDR_ENV=1) keeps `herdr.ts`; this file only opens, relabels
+ * the terminal that spawned the job. Legacy `herdr` (HERDR_ENV=1) keeps `herdr.ts`; this file only opens
  * and removes views. Every call here is advisory: a failure is a line in the job log, never a failed job.
  */
 export type CoreView = {
@@ -121,8 +121,8 @@ export async function reopenCoreView(input: {
 }
 
 /**
- * At finish the view stays open on the final log; its `limen.state` label takes the job's terminal state. A detached
- * child does the relabel, as the legacy tab closer does, so finalize never waits on herdr-core.
+ * At finish a detached child closes the view, as the legacy tab closer does,
+ * so finalize never waits on herdr-core.
  */
 export async function settleCoreView(jobDir: string): Promise<void> {
 	const bin = coreBinary();
@@ -130,30 +130,17 @@ export async function settleCoreView(jobDir: string): Promise<void> {
 		return;
 	}
 	if (!bin) {
-		return skip(jobDir, "herdr-core is not available; the view keeps its running label");
+		return skip(jobDir, "herdr-core is not available; the view stays open");
 	}
 	const from = JSON.stringify(import.meta.url);
-	const relabel = `import { relabelCoreView } from ${from}; await relabelCoreView(${JSON.stringify(bin)}, ${JSON.stringify(jobDir)});`;
+	const close = `import { closeCoreView } from ${from}; await closeCoreView(${JSON.stringify(jobDir)});`;
 	try {
-		const child = spawn(process.execPath, ["--no-warnings", "--input-type=module", "--eval", relabel], {
+		const child = spawn(process.execPath, ["--no-warnings", "--input-type=module", "--eval", close], {
 			detached: true,
 			stdio: "ignore",
 		});
-		child.once("error", (error) => void skip(jobDir, `relabel could not start: ${error.message}`));
+		child.once("error", (error) => void skip(jobDir, `close could not start: ${error.message}`));
 		child.unref();
-	} catch (error) {
-		await skip(jobDir, message(error));
-	}
-}
-
-/** The detached relabel: each herdr-core call has its own short timeout; a failure is a line in the job log. */
-export async function relabelCoreView(bin: string, jobDir: string): Promise<void> {
-	const view = await readCoreView(jobDir);
-	try {
-		const state = (await text(`${jobDir}/state`)) || "finished";
-		if (view && ownedTerminal(bin, view, basename(jobDir))) {
-			call(bin, view.socket, ["label", "--json", view.terminal, `limen.state=${state}`], 5_000);
-		}
 	} catch (error) {
 		await skip(jobDir, message(error));
 	}

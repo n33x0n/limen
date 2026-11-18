@@ -54,12 +54,12 @@ view: `herdr-core run --bg --no-parent --outlive-parent --no-notify`, running
 part. Its labels `limen.job`, `limen.label` and `limen.state` name the job; the
 job records the view under `.limen/jobs/<id>/herdr-core/`.
 
-At finish the view stays open on the final log and `limen.state` takes the job's
-state. `limen open` names a live view (herdr-core has no focus verb) or opens a
-new one that shows the whole log. `limen close FNNN` and `limen prune --retire`
-kill and remove the view. Limen touches a terminal only while its `limen.job`
-label names the job. A herdr-core failure is a `herdr-core skipped:` line in the
-job log; the job goes on.
+At finish (`done`, `failed` or `stopped`), a detached child kills and removes the
+view and its `herdr-core/` record without making finalization wait. The job's
+state, log and result stay. `limen open` inside herdr-core opens a new view that
+shows the whole log. `limen close FNNN` and `limen prune --retire` also remove
+views. Limen touches a terminal only while its `limen.job` label names the job.
+A herdr-core failure is a `herdr-core skipped:` line in the job log; the job goes on.
 
 With `HERDR_ENV=1` the legacy `herdr` tabs above apply unchanged. These stay
 legacy-only: hosted `--tab` jobs and group tab mode (they refuse without
